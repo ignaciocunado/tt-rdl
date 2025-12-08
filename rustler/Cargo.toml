@@ -16,7 +16,7 @@ itertools = "*"
 serde = { version = "*", features = ["derive"] }
 rand = "0.9.1"
 clap = { version = "*", features = ["derive"] }
-pyo3 = { version = "*", features = ["abi3-py312"] }
+pyo3 = { version = "*", features = ["abi3-py39"] }
 memmap2 = "*"
 rkyv = "*"
 numpy = { version = "*", features = ["half"] }
