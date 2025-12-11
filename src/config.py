@@ -18,16 +18,18 @@ def logger_setup(log_dir: str):
         level=logging.INFO,
         format="%(asctime)s [%(levelname)-5.5s] %(message)s",
         handlers=[
-            logging.FileHandler(os.path.join(log_dir, "logs.log")),  # Log to run-specific log file
-            logging.StreamHandler(sys.stdout)  # Log also to stdout
-        ]
+            logging.FileHandler(
+                os.path.join(log_dir, "logs.log")
+            ),  # Log to run-specific log file
+            logging.StreamHandler(sys.stdout),  # Log also to stdout
+        ],
     )
 
 
 @dataclass
 class CustomConfig:
     """Unified configuration class for RelBench project.
-    
+
     Attributes:
         # Model Configuration
         channels (int): Number of hidden channels in the model
@@ -35,32 +37,33 @@ class CustomConfig:
         out_channels (int): Number of output channels
         aggr (str): Aggregation method for GNN
         norm (str): Normalization type
-        
+
         # Training Configuration
         learning_rate (float): Learning rate for optimizer
         epochs (int): Number of epochs to train
         batch_size (int): Batch size for training
         num_workers (int): Number of workers for data loading
         device (torch.device): Device to run training on
-        
+
         # Model Selection
         higher_is_better (bool): Whether higher metric value is better
         tune_metric (str): Metric to use for model selection
         early_stopping (bool): Whether to use early stopping
         patience (int): Number of epochs to wait before early stopping
-        
+
         # Data and File Paths
         data_dir (str): Directory for data storage
         output_dir (str): Root directory for all run outputs
-        
+
         # Evaluation parameters
         evaluation_freq (int): Frequency of evaluation (every N epochs)
     """
+
     # Data and File Paths
-    data_name: str = 'f1'
-    task_name: str = 'driver-position'
-    data_dir: str = './data'
-    output_dir: str = './runs'  # Root directory for all run outputs
+    data_name: str = "f1"
+    task_name: str = "driver-position"
+    data_dir: str = "./data"
+    output_dir: str = "./runs"  # Root directory for all run outputs
 
     # Model Configuration
     sequence_length: int = 1024
@@ -80,7 +83,7 @@ class CustomConfig:
     max_steps_per_epoch: int = 2000
     batch_size: int = 32
     num_workers: int = 6
-    device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     save_artifacts: bool = True
     max_bfs_width: int = 256
     d_text: int = 384
@@ -103,7 +106,9 @@ class CustomConfig:
     def __post_init__(self):
         # Create a unique directory for this run
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_dir = os.path.join(self.output_dir, f"{self.data_name}_{self.task_name}_{timestamp}")
+        self.run_dir = os.path.join(
+            self.output_dir, f"{self.data_name}_{self.task_name}_{timestamp}"
+        )
 
         # Set up paths for logs, checkpoints, and config
         self.log_dir = os.path.join(self.run_dir, "logs")
@@ -124,14 +129,17 @@ class CustomConfig:
     def save_config(self):
         """Save configuration to YAML file"""
         # Create a dictionary of serializable config values
-        config_dict = {k: v for k, v in vars(self).items()
-                       if not k.startswith('_') and not callable(v) and k != 'device'}
+        config_dict = {
+            k: v
+            for k, v in vars(self).items()
+            if not k.startswith("_") and not callable(v) and k != "device"
+        }
 
         # Handle non-serializable types
-        config_dict['device'] = str(self.device)
+        config_dict["device"] = str(self.device)
 
         # Write to YAML file
-        with open(self.config_path, 'w') as f:
+        with open(self.config_path, "w") as f:
             yaml.dump(config_dict, f, default_flow_style=False)
 
         logging.info(f"Configuration saved to {self.config_path}")
@@ -181,7 +189,7 @@ class CustomConfig:
 
     def get_model_kwargs(self) -> Dict[str, Any]:
         """Returns model configuration as a dictionary.
-        
+
         Returns:
             Dict[str, Any]: Model configuration parameters
         """
@@ -190,12 +198,12 @@ class CustomConfig:
             "num_layers": self.num_layers,
             "out_channels": self.out_channels,
             "aggr": self.aggr,
-            "norm": self.norm
+            "norm": self.norm,
         }
 
     def get_training_kwargs(self) -> Dict[str, Any]:
         """Returns training configuration as a dictionary.
-        
+
         Returns:
             Dict[str, Any]: Training configuration parameters
         """
@@ -207,5 +215,5 @@ class CustomConfig:
             "higher_is_better": self.higher_is_better,
             "tune_metric": self.tune_metric,
             "early_stopping": self.early_stopping,
-            "patience": self.patience
+            "patience": self.patience,
         }

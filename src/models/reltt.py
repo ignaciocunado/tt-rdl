@@ -56,10 +56,10 @@ class FFN(nn.Module):
 
 class RelationalBlock(nn.Module):
     def __init__(
-            self,
-            d_model,
-            num_heads,
-            d_ff,
+        self,
+        d_model,
+        num_heads,
+        d_ff,
     ):
         super().__init__()
 
@@ -98,12 +98,12 @@ def _make_block_mask(mask, batch_size, seq_len, device):
 
 class RelationalTransformer(nn.Module):
     def __init__(
-            self,
-            num_blocks,
-            d_model,
-            d_text,
-            num_heads,
-            d_ff,
+        self,
+        num_blocks,
+        d_model,
+        d_text,
+        num_heads,
+        d_ff,
     ):
         super().__init__()
 
@@ -174,7 +174,7 @@ class RelationalTransformer(nn.Module):
 
         # Same column AND same table
         same_col_table = (col_name_idxs[:, :, None] == col_name_idxs[:, None, :]) & (
-                table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
+            table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
         )  # (B, S, S)
 
         # Final boolean masks (apply padding once here)
@@ -202,20 +202,20 @@ class RelationalTransformer(nn.Module):
 
         x = 0
         x = x + (
-                self.norm_dict["col_name"](
-                    self.enc_dict["col_name"](batch["col_name_values"])
-                )
-                * (~is_padding)[..., None]
+            self.norm_dict["col_name"](
+                self.enc_dict["col_name"](batch["col_name_values"])
+            )
+            * (~is_padding)[..., None]
         )
 
         for i, t in enumerate(["number", "text", "datetime", "boolean"]):
             x = x + (
-                    self.norm_dict[t](self.enc_dict[t](batch[t + "_values"]))
-                    * ((batch["sem_types"] == i) & ~batch["masks"] & ~is_padding)[..., None]
+                self.norm_dict[t](self.enc_dict[t](batch[t + "_values"]))
+                * ((batch["sem_types"] == i) & ~batch["masks"] & ~is_padding)[..., None]
             )
             x = x + (
-                    self.mask_embs[t]
-                    * ((batch["sem_types"] == i) & batch["masks"] & ~is_padding)[..., None]
+                self.mask_embs[t]
+                * ((batch["sem_types"] == i) & batch["masks"] & ~is_padding)[..., None]
             )
 
         for i, block in enumerate(self.blocks):

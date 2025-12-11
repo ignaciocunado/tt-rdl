@@ -54,19 +54,19 @@ class RelBenchDataLoader:
     """
 
     def __init__(
-            self,
-            data_name: str,
-            task_name: str,
-            split: str,
-            root_dir: str = "./data",
-            batch_size: int = 128,
-            num_workers: int = 0,
-            seq_len: int = 1024,
-            rank: int = 0,
-            world_size: int = 1,
-            max_bfs_width: int = 256,
-            d_text: int = 384,
-            seed: int = 42,
+        self,
+        data_name: str,
+        task_name: str,
+        split: str,
+        root_dir: str = "./data",
+        batch_size: int = 128,
+        num_workers: int = 0,
+        seq_len: int = 1024,
+        rank: int = 0,
+        world_size: int = 1,
+        max_bfs_width: int = 256,
+        d_text: int = 384,
+        seed: int = 42,
     ):
         self.data_name = data_name
         self.task_name = task_name
@@ -85,7 +85,7 @@ class RelBenchDataLoader:
             rank=rank,
             world_size=world_size,
             max_bfs_width=max_bfs_width,
-            embedding_model='all-MiniLM-L12-v2',
+            embedding_model="all-MiniLM-L12-v2",
             d_text=d_text,
             seed=seed,
             target_columns=target_column_indices,
@@ -191,6 +191,7 @@ class RelBenchDataLoader:
         )
 
         return out
+
 
 @cache
 def _load_column_index(db_name: str) -> dict:
