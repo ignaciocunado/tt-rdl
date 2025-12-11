@@ -1,24 +1,25 @@
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, field
-import os
 import logging
+import os
 import sys
-import yaml
-from datetime import datetime 
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Dict, Any, List
+
 import torch
+import yaml
 
 
 def logger_setup(log_dir: str):
     """Setup logging to file and stdout"""
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    
+
     logging.basicConfig(
-        level=logging.INFO, 
+        level=logging.INFO,
         format="%(asctime)s [%(levelname)-5.5s] %(message)s",
         handlers=[
             logging.FileHandler(os.path.join(log_dir, "logs.log")),  # Log to run-specific log file
-            logging.StreamHandler(sys.stdout)                        # Log also to stdout
+            logging.StreamHandler(sys.stdout)  # Log also to stdout
         ]
     )
 
@@ -62,81 +63,83 @@ class CustomConfig:
     output_dir: str = './runs'  # Root directory for all run outputs
 
     # Model Configuration
-    channels: int = 32
-    num_layers: int = 2
-    num_layers_pre_gt: int = 0
+    sequence_length: int = 1024
+    num_blocks: int = 12
+    attn_heads: int = 8
+    channels: int = 256
     out_channels: int = 1
-    num_neighbors: List[int] = field(default_factory=lambda: [32, 32])
-    temporal_strategy: str = "uniform"
-    aggr: str = "sum"
     norm: str = "batch_norm"
+    feed_forward_dim: int = 1024
 
     # Training Configuration
     learning_rate: float = 0.005
+    learning_rate_schedule: bool = False
+    weight_decay: float = 0.1
     epochs: int = 10
     optimiser: str = "Adam"
     max_steps_per_epoch: int = 2000
-    batch_size: int = 128
+    batch_size: int = 32
     num_workers: int = 6
     device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    ego_ids: bool = True
     save_artifacts: bool = True
-    
+    max_bfs_width: int = 256
+    d_text: int = 384
+
     # Model Selection
     higher_is_better: bool = True
     tune_metric: str = "f1"
     early_stopping: bool = False
     patience: int = 5
-    
+
     # Evaluation parameters
     evaluation_freq: int = 4
-    
+
     # Run-specific paths, set during initialization
     run_dir: str = None
     log_dir: str = None
     checkpoint_dir: str = None
     config_path: str = None
-    
+
     def __post_init__(self):
         # Create a unique directory for this run
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_dir = os.path.join(self.output_dir, f"{self.data_name}_{self.task_name}_{timestamp}")
-        
+
         # Set up paths for logs, checkpoints, and config
         self.log_dir = os.path.join(self.run_dir, "logs")
         self.checkpoint_dir = os.path.join(self.run_dir, "checkpoints")
         self.config_path = os.path.join(self.run_dir, "config.yaml")
-        
+
         # Create directories
         os.makedirs(self.run_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        
+
         # Set up logging
         logger_setup(self.log_dir)
-        
+
         # Save config to YAML file
         self.save_config()
-    
+
     def save_config(self):
         """Save configuration to YAML file"""
         # Create a dictionary of serializable config values
-        config_dict = {k: v for k, v in vars(self).items() 
-                      if not k.startswith('_') and not callable(v) and k != 'device'}
-        
+        config_dict = {k: v for k, v in vars(self).items()
+                       if not k.startswith('_') and not callable(v) and k != 'device'}
+
         # Handle non-serializable types
         config_dict['device'] = str(self.device)
-        
+
         # Write to YAML file
         with open(self.config_path, 'w') as f:
             yaml.dump(config_dict, f, default_flow_style=False)
-        
+
         logging.info(f"Configuration saved to {self.config_path}")
-    
+
     def print_config(self):
         """Prints and logs all configuration settings."""
         config_str = "\n=== RelBench Configuration ===\n"
-        
+
         # Model Configuration
         config_str += "\nModel Configuration:\n"
         config_str += f"Channels: {self.channels}\n"
@@ -148,8 +151,7 @@ class CustomConfig:
         config_str += f"Reverse Message Passing: {self.reverse_mp}\n"
         config_str += f"Port Numbering: {self.port_numbering}\n"
         config_str += f"Dropouts: {self.dropouts}\n"
-        config_str += f"Head: {self.head}\n"
-        
+
         # Training Configuration
         config_str += "\nTraining Configuration:\n"
         config_str += f"Learning Rate: {self.learning_rate}\n"
@@ -159,24 +161,24 @@ class CustomConfig:
         config_str += f"Number of Workers: {self.num_workers}\n"
         config_str += f"Device: {self.device}\n"
         config_str += f"Ego IDs: {self.ego_ids}\n"
-        
+
         # Model Selection
         config_str += "\nModel Selection:\n"
         config_str += f"Higher is Better: {self.higher_is_better}\n"
         config_str += f"Tune Metric: {self.tune_metric}\n"
         config_str += f"Early Stopping: {self.early_stopping}\n"
         config_str += f"Patience: {self.patience}\n"
-        
+
         # Paths
         config_str += "\nPaths:\n"
         config_str += f"Data Directory: {self.data_dir}\n"
         config_str += f"Run Directory: {self.run_dir}\n"
         config_str += f"Log Directory: {self.log_dir}\n"
         config_str += f"Checkpoint Directory: {self.checkpoint_dir}\n"
-        
+
         # Log configuration
         logging.info("Configuration:\n%s", config_str)
-    
+
     def get_model_kwargs(self) -> Dict[str, Any]:
         """Returns model configuration as a dictionary.
         
@@ -190,7 +192,7 @@ class CustomConfig:
             "aggr": self.aggr,
             "norm": self.norm
         }
-    
+
     def get_training_kwargs(self) -> Dict[str, Any]:
         """Returns training configuration as a dictionary.
         
