@@ -1,3 +1,6 @@
+> **Reference**: This is an adaptation from [Relational Transformer: Toward Zero-Shot Foundation Models for Relational Data](https://arxiv.org/abs/2510.06377), where we use their Tabular Transformer model to evaluate it on normal supervised learning RelBench tasks.
+---
+
 ## Setup
 
 - Create a new Conda environment, and activate.
