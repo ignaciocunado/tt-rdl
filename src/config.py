@@ -61,6 +61,7 @@ class CustomConfig:
     task_name: str = 'driver-position'
     data_dir: str = './data'
     output_dir: str = './runs'  # Root directory for all run outputs
+    task_type: str = field(init=False)
 
     # Model Configuration
     sequence_length: int = 1024
@@ -76,6 +77,8 @@ class CustomConfig:
     learning_rate_schedule: bool = False
     weight_decay: float = 0.1
     epochs: int = 10
+    max_steps: int = 50_001
+    max_grad_norm: float = 1.0
     optimiser: str = "Adam"
     max_steps_per_epoch: int = 2000
     batch_size: int = 32
@@ -86,13 +89,15 @@ class CustomConfig:
     d_text: int = 384
 
     # Model Selection
-    higher_is_better: bool = True
+    higher_is_better: bool = task_type == 'clf'
     tune_metric: str = "f1"
     early_stopping: bool = False
     patience: int = 5
 
     # Evaluation parameters
     evaluation_freq: int = 4
+    max_eval_steps: int = 40
+    eval_pow2: bool = True
 
     # Run-specific paths, set during initialization
     run_dir: str = None
@@ -109,6 +114,7 @@ class CustomConfig:
         self.log_dir = os.path.join(self.run_dir, "logs")
         self.checkpoint_dir = os.path.join(self.run_dir, "checkpoints")
         self.config_path = os.path.join(self.run_dir, "config.yaml")
+        self.task_dir = self.get_task_type()
 
         # Create directories
         os.makedirs(self.run_dir, exist_ok=True)
@@ -209,3 +215,19 @@ class CustomConfig:
             "early_stopping": self.early_stopping,
             "patience": self.patience
         }
+
+    def get_task_type(self) -> str:
+        if self.task_name in [
+            "item-sales",
+            "user-ltv",
+            "item-ltv",
+            "post-votes",
+            "site-success",
+            "study-adverse",
+            "user-attendance",
+            "driver-position",
+            "ad-ctr",
+        ]:
+            return "reg"
+
+        return "clf"

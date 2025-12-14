@@ -1,212 +1,204 @@
-from typing import Dict, Any, Tuple
-import torch
-import copy
-from tqdm import tqdm
-from torch.optim import Optimizer
-from torch.nn import Module
-from torch_geometric.loader import NeighborLoader
-import numpy as np
-from .config import CustomConfig
 import logging
-from relbench.base import TaskType
-import os
+import time
+from pathlib import Path
+from typing import Dict
+
+import torch
 import wandb
+from torch.nn import Module
+from torch.nn.utils import clip_grads_with_norm_, get_total_norm
+from sklearn.metrics import roc_auc_score, mean_absolute_error
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
+from tqdm import tqdm
 
+from config import CustomConfig
 
-
-def train_epoch(
-    loader: NeighborLoader,
-    model: Module,
-    optimizer: Optimizer,
-    loss_fn: Module,
-    task: Any,
-    config: CustomConfig
-) -> float:
-    """Trains the model for one epoch.
-    
-    Args:
-        loader: Data loader for training
-        model: Model to train
-        optimizer: Optimizer for training
-        loss_fn: Loss function
-        task: RelBench task
-        config: Training configuration
-        
-    Returns:
-        float: Average training loss for the epoch
-    """
-    model.train()
-    loss_accum = count_accum = 0
-    steps = 0
-    total_steps = min(len(loader), config.max_steps_per_epoch)
-    for batch in tqdm(loader, desc="Training", total=total_steps):
-        batch = batch.to(config.device)
-        optimizer.zero_grad()
-
-        pred = model(
-            batch,
-            task.entity_table
-        )
-        pred = pred.view(-1) if pred.size(1) == 1 else pred
-        
-        loss = loss_fn(pred.float(), batch[task.entity_table].y.float())
-        loss.backward()
-        optimizer.step()
-
-        loss_accum += loss.detach().item() * pred.size(0)
-        count_accum += pred.size(0)
-
-        steps += 1
-        if steps > config.max_steps_per_epoch:
-            break
-    
-    return loss_accum / count_accum
-
-
-@torch.no_grad()
-def eval_epoch(
-    loader: NeighborLoader,
-    model: Module,
-    task: Any,
-    config: CustomConfig
-) -> np.ndarray:
-    """Evaluates the model on the given loader.
-    
-    Args:
-        loader: Data loader for evaluation
-        model: Model to evaluate
-        task: RelBench task
-        config: Training configuration
-        
-    Returns:
-        np.ndarray: Model predictions
-    """
+def evaluate(model, steps, loaders, eval_loaders_iters, config):
+    metrics = {"val": {}, "test": {}}
     model.eval()
-    pred_list = []
-    
-    for batch in tqdm(loader):
-        batch = batch.to(config.device)
-        pred = model(batch, task.entity_table)
+    with torch.inference_mode():
+        for split, eval_loader_iter in eval_loaders_iters.items():
+            preds = []
+            labels = []
+            losses = []
+            eval_load_times = []
+            eval_loader = loaders[split]
+            pbar = tqdm(
+                total=(min(config.max_eval_steps, len(eval_loader)) if config.max_eval_steps > -1 else len(eval_loader)),
+                desc=f"{config.data_name}/{config.task_name}/{split}",
+                disable=False,
+            )
 
-        if task.task_type in [
-            TaskType.BINARY_CLASSIFICATION,
-            TaskType.MULTILABEL_CLASSIFICATION,
-        ]:
-            pred = torch.sigmoid(pred)
-        
-        pred = pred.view(-1) if pred.size(1) == 1 else pred
-        pred_list.append(pred.detach().cpu())
-        
-    return torch.cat(pred_list, dim=0).numpy()
+            batch_idx = 0
+            while True:
+                tic = time.time()
+                try:
+                    batch = next(eval_loader_iter)
+                    batch_idx += 1
+                except StopIteration:
+                    break
+                toc = time.time()
+                pbar.update(1)
+
+                eval_load_time = toc - tic
+                eval_load_times.append(eval_load_time)
+
+                true_batch_size = batch.pop("true_batch_size")
+                for k in batch:
+                    batch[k] = batch[k].to(config.device, non_blocking=True)
+
+                batch["masks"][true_batch_size:, :] = False
+                batch["is_targets"][true_batch_size:, :] = False
+                batch["is_padding"][true_batch_size:, :] = True
+
+                loss, yhat_dict = model(batch)
+
+                if config.task_type == "clf":
+                    yhat = yhat_dict["boolean"][batch["is_targets"]]
+                    y = batch["boolean_values"][batch["is_targets"]].flatten()
+                elif config.task_type == "reg":
+                    yhat = yhat_dict["number"][batch["is_targets"]]
+                    y = batch["number_values"][batch["is_targets"]].flatten()
+
+                assert yhat.size(0) == true_batch_size
+                assert y.size(0) == true_batch_size
+
+                pred = yhat.flatten()
+
+                losses.append(loss.item())
+                preds.append(pred)
+                labels.append(y)
+
+                if -1 < config.max_eval_steps <= batch_idx:
+                    break
+
+            eval_loaders_iters[split] = iter(eval_loader)
+
+            pbar.close()
+            preds = torch.cat(preds, dim=0)
+            labels = torch.cat(labels, dim=0)
+
+            preds = [preds]
+            labels = [labels]
+
+            loss = sum(losses) / len(losses)
+            k = f"loss/{config.data_name}/{config.task_name}/{split}"
+            avg_eval_load_time = sum(eval_load_times) / len(eval_load_times)
+            wandb.log({k: loss,f"avg_eval_load_time/{config.data_name}/{config.task_name}": avg_eval_load_time,}, step=steps)
+
+            preds = torch.cat(preds, dim=0).float().cpu().numpy()
+            labels = torch.cat(labels, dim=0).float().cpu().numpy()
+
+            if config.task_type == "reg":
+                metric_name = "mae"
+                metric = mean_absolute_error(labels, preds)
+            elif config.task_type == "clf":
+                metric_name = "auc"
+                labels = [int(x > 0) for x in labels]
+                metric = roc_auc_score(labels, preds)
+
+            k = f"{metric_name}/{config.data_name}/{config.task_name}/{split}"
+            wandb.log({k: metric}, step=steps)
+            print(f"\nstep={steps}, \t{k}: {metric}")
+            metrics[split][(config.data_name, config.task_name)] = metric
+
+    return metrics
 
 
-def train(
-    model: Module,
-    loaders: Dict[str, NeighborLoader],
-    optimizer: Optimizer,
-    loss_fn: Module,
-    task: Any,
-    config: CustomConfig
-) -> Tuple[Dict[str, float], Module]:
-    """Main training loop with validation and model selection.
-    
-    Args:
-        model: Model to train
-        loaders: Dictionary containing train/val/test dataloaders
-        optimizer: Optimizer for training
-        loss_fn: Loss function
-        task: RelBench task
-        config: Training configuration
+def checkpoint(model: Module, steps, config: CustomConfig, best=False):
+    save_ckpt_dir_ = Path(config.checkpoint_dir).expanduser()
+    save_ckpt_dir_.mkdir(parents=True, exist_ok=True)
+    if best:
+        save_ckpt_path = f"{save_ckpt_dir_}/{config.data_name}_{config.task_name}_best.pt"
+    else:
+        save_ckpt_path = f"{save_ckpt_dir_}/{steps=}.pt"
 
-    Returns:
-        Tuple containing:
-            - Dictionary of best metrics
-            - Best model state
-    """
-    state_dict = None
-    best_val_metric = float('-inf') if config.higher_is_better else float('inf')
-    no_improve_count = 0
-    best_metrics = {}
-    
-    for epoch in range(1, config.epochs + 1):
-        # Training phase
-        train_loss = train_epoch(loaders['train'], model, optimizer, loss_fn, task, config)
+    state_dict = model.state_dict()
+    torch.save(state_dict, save_ckpt_path)
+    print(f"saved checkpoint to {save_ckpt_path}")
 
-        wandb.log({"epoch": epoch, "train_loss": train_loss})
-        # Perform validation based on the evaluation frequency setting
-        if epoch % config.evaluation_freq == 0 or epoch == 1 or epoch == config.epochs:
-            # Validation phase
-            val_pred = eval_epoch(loaders['val'], model, task, config)
-            test_pred = eval_epoch(loaders['test'], model, task, config)
 
-            val_metrics = task.evaluate(val_pred, task.get_table("val"))
-            test_metrics = task.evaluate(test_pred)
+def train(model: Module, loaders: Dict, optimizer: Optimizer, lrs: LRScheduler, config: CustomConfig):
+    eval_loader_iters = {}
+    for k, eval_loader in loaders.items():
+        if k == 'train':
+            pass
+        eval_loader_iters[k] = iter(eval_loader)
 
-            # Logging
-            logging.info(f"Epoch: {epoch:02d}, Train loss: {train_loss:.4f}, Val metrics: {val_metrics}, Test metrics: {test_metrics}")
-            wandb.log({
-                "epoch": epoch,
-                "train_loss": train_loss,
-                "val_metrics": val_metrics,
-                "test_metrics": test_metrics
-            })
+    steps = 0
+    wandb.log({"epochs": 0}, step=steps)
 
-            # Model selection
-            current_metric = val_metrics[config.tune_metric]
-            improved = (config.higher_is_better and current_metric > best_val_metric) or \
-                      (not config.higher_is_better and current_metric < best_val_metric)
-            
-            if improved:
-                best_val_metric = current_metric
-                best_test_metric = test_metrics[config.tune_metric]
-                wandb.log({
-                    "epoch": epoch,
-                    "best_val_metric": best_val_metric,
-                    "best_test_metric": best_test_metric,
-                })
-                state_dict = copy.deepcopy(model.state_dict())
-                best_metrics = val_metrics
-                no_improve_count = 0
+    pbar = tqdm(total=config.max_steps, desc="steps", disable=False)
 
-                
-                # Save the model with comprehensive metadata
+    best_val_metrics = dict()
+    best_test_metrics = dict()
+
+    while steps < config.max_steps:
+        loaders['train'].dataset.sampler.shuffle_py(int(steps / len(loaders['train'])))
+        loader_iter = iter(loaders['train'])
+
+        while steps < config.max_steps:
+            if (config.evaluation_freq is not None and steps % config.evaluation_freq == 0) or (
+                    config.eval_pow2 and steps & (steps - 1) == 0
+            ):
+                metrics = evaluate(model, steps, loaders, eval_loader_iters, config)
                 if config.save_artifacts:
-                    # Save checkpoint in the run-specific checkpoint directory
-                    # Create a unique filename with metric value
-                    metric_value = f"{current_metric:.4f}".replace(".", "-")
-                    checkpoint_filename = f"epoch_{epoch:03d}_{config.tune_metric}_{metric_value}.pt"
-                    checkpoint_path = os.path.join(config.checkpoint_dir, checkpoint_filename)
+                    for (db_name, table_name), metric in metrics["val"].items():
+                        best_metric = best_val_metrics.get((db_name, table_name), -float("inf"))
+                        if config.higher_is_better and metric > best_metric:
+                            best_val_metrics[(db_name, table_name)] = metric
+                            best_test_metrics[(db_name, table_name)] = metrics["test"][(db_name, table_name)]
+                            checkpoint(model, steps=steps, config=config, best=True)
+                        elif not config.higher_is_better and metric < best_metric:
+                            best_val_metrics[(db_name, table_name)] = metric
+                            best_test_metrics[(db_name, table_name)] = metrics["test"][(db_name, table_name)]
+                            checkpoint(model, steps=steps, config=config, best=True)
 
-                    torch.save({
-                        'epoch': epoch,
-                        'model_state_dict': state_dict,
-                        'optimizer_state_dict': optimizer.state_dict(),
-                    }, checkpoint_path)
-                    artifact = wandb.Artifact('model_checkpoint', type='model')
-                    artifact.add_file(checkpoint_path)
-                    wandb.log_artifact(artifact)
-                    logging.info(f"Saved model checkpoint to {checkpoint_path}")
+                        else:
+                            checkpoint(model, steps=steps, config=config,  best=False)
 
-            else:
-                no_improve_count += 1
-            
-            # Early stopping
-            if config.early_stopping and no_improve_count >= config.patience:
-                logging.info(f"Early stopping triggered after {epoch} epochs")
+            model.train()
+
+            tic = time.time()
+            try:
+                batch = next(loader_iter)
+            except StopIteration:
                 break
-        else:
-            logging.info(f"Epoch: {epoch:02d}, Train loss: {train_loss:.4f}")
-    
-    # Load best model
-    if state_dict is not None:
-        model.load_state_dict(state_dict)
-    
-    # Final evaluation on test set
-    test_pred = eval_epoch(loaders['test'], model, task, config)
-  
-    test_metrics = task.evaluate(test_pred)
-    logging.info(f"Best validation metrics: {best_metrics}")
-    logging.info(f"Test metrics: {test_metrics}")
-    wandb.finish()
+            batch.pop("true_batch_size")
+            for k in batch:
+                batch[k] = batch[k].to(config.device, non_blocking=True)
+            toc = time.time()
+            load_time = toc - tic
+            wandb.log({"load_time": load_time}, step=steps)
 
-    return best_metrics, model
+            loss, _yhat_dict = model(batch)
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+
+            grad_norm = get_total_norm([p.grad for p in model.parameters() if p.grad is not None])
+            clip_grads_with_norm_(model.parameters(), max_norm=config.max_grad_norm, total_norm=grad_norm)
+
+            optimizer.step()
+            if config.learning_rate_schedule:
+                lrs.step()
+
+            steps += 1
+
+            wandb.log({
+                    "loss": loss,
+                    "lr": optimizer.param_groups[0]["lr"],
+                    "epochs": steps / len(loaders['train']),
+                    "grad_norm": grad_norm,
+                },
+                step=steps,
+            )
+
+            pbar.update(1)
+
+    logging.info("\n" + "=" * 80)
+    logging.info("Best test metrics:")
+    logging.info("=" * 80)
+    for (db_name, table_name), metric in best_test_metrics.items():
+        logging.info(f"{db_name}/{table_name}/test: {metric:.4f}")
+    logging.info("=" * 80 + "\n")
