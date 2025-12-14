@@ -33,7 +33,7 @@ jobs:
 
       - name: Format code with black
         run: |
-          black .
+          black . --line-length 120
 
       - name: Commit and push changes
         run: |
