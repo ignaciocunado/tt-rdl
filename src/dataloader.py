@@ -54,19 +54,19 @@ class RelBenchDataLoader:
     """
 
     def __init__(
-            self,
-            data_name: str,
-            task_name: str,
-            split: str,
-            root_dir: str = "./data",
-            batch_size: int = 128,
-            num_workers: int = 0,
-            seq_len: int = 1024,
-            rank: int = 0,
-            world_size: int = 1,
-            max_bfs_width: int = 256,
-            d_text: int = 384,
-            seed: int = 42,
+        self,
+        data_name: str,
+        task_name: str,
+        split: str,
+        root_dir: str = "./data",
+        batch_size: int = 128,
+        num_workers: int = 0,
+        seq_len: int = 1024,
+        rank: int = 0,
+        world_size: int = 1,
+        max_bfs_width: int = 256,
+        d_text: int = 384,
+        seed: int = 42,
     ):
         self.data_name = data_name
         self.task_name = task_name
@@ -85,7 +85,7 @@ class RelBenchDataLoader:
             rank=rank,
             world_size=world_size,
             max_bfs_width=max_bfs_width,
-            embedding_model='all-MiniLM-L12-v2',
+            embedding_model="all-MiniLM-L12-v2",
             d_text=d_text,
             seed=seed,
             target_columns=target_column_indices,
@@ -123,17 +123,13 @@ class RelBenchDataLoader:
         target_column_indices = []
         drop_column_indices = []
 
-        table_info_path = (
-            f"{os.environ['HOME']}/scratch/pre/{self.data_name}/table_info.json"
-        )
+        table_info_path = f"{os.environ['HOME']}/scratch/pre/{self.data_name}/table_info.json"
         with open(table_info_path) as f:
             table_info = json.load(f)
 
         # choose the correct entry for THIS split
         table_info_key = (
-            f"{self.task_name}:Db"
-            if f"{self.task_name}:Db" in table_info
-            else f"{self.task_name}:{self.split}"
+            f"{self.task_name}:Db" if f"{self.task_name}:Db" in table_info else f"{self.task_name}:{self.split}"
         )
         info = table_info[table_info_key]
         node_idx_offset = info["node_idx_offset"]
@@ -182,15 +178,12 @@ class RelBenchDataLoader:
         out["f2p_nbr_idxs"] = out["f2p_nbr_idxs"].view(-1, self.seq_len, 5)
         out["number_values"] = out["number_values"].view(-1, self.seq_len, 1)
         out["datetime_values"] = out["datetime_values"].view(-1, self.seq_len, 1)
-        out["boolean_values"] = (
-            out["boolean_values"].view(-1, self.seq_len, 1).bfloat16()
-        )
+        out["boolean_values"] = out["boolean_values"].view(-1, self.seq_len, 1).bfloat16()
         out["text_values"] = out["text_values"].view(-1, self.seq_len, self.d_text)
-        out["col_name_values"] = out["col_name_values"].view(
-            -1, self.seq_len, self.d_text
-        )
+        out["col_name_values"] = out["col_name_values"].view(-1, self.seq_len, self.d_text)
 
         return out
+
 
 @cache
 def _load_column_index(db_name: str) -> dict:
@@ -198,9 +191,7 @@ def _load_column_index(db_name: str) -> dict:
     Load the column index mapping for a dataset (cached).
     """
     home = os.environ.get("HOME", ".")
-    column_index_path = os.path.join(
-        home, "scratch", "pre", db_name, "column_index.json"
-    )
+    column_index_path = os.path.join(home, "scratch", "pre", db_name, "column_index.json")
 
     with open(column_index_path) as f:
         return json.load(f)
@@ -214,8 +205,6 @@ def get_column_index(column_name: str, table_name: str, db_name: str) -> int:
     target = f"{column_name} of {table_name}"
 
     if target not in column_index:
-        raise ValueError(
-            f'Column "{target}" not found in column_index.json for dataset {db_name}.'
-        )
+        raise ValueError(f'Column "{target}" not found in column_index.json for dataset {db_name}.')
 
     return column_index[target]

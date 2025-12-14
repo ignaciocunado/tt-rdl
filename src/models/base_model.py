@@ -10,10 +10,10 @@ from torch_geometric.typing import NodeType
 
 class BaseModel(torch.nn.Module, ABC):
     """Base RelBench model with common encoder components.
-    
+
     This abstract class provides the basic encoder structure and temporal processing,
     while leaving the rest of the architecture to be defined by child classes.
-    
+
     Args:
         data (HeteroData): Input graph data
         col_stats_dict (Dict): Column statistics dictionary
@@ -22,30 +22,24 @@ class BaseModel(torch.nn.Module, ABC):
     """
 
     def __init__(
-            self,
-            data: HeteroData,
-            col_stats_dict: Dict,
-            channels: int,
-            torch_frame_model_kwargs: Dict[str, Any] = {},
+        self,
+        data: HeteroData,
+        col_stats_dict: Dict,
+        channels: int,
+        torch_frame_model_kwargs: Dict[str, Any] = {},
     ):
         super().__init__()
 
         # Initialize base encoders
         self.encoder = HeteroEncoder(
             channels=channels,
-            node_to_col_names_dict={
-                node_type: data[node_type].tf.col_names_dict
-                for node_type in data.node_types
-            },
+            node_to_col_names_dict={node_type: data[node_type].tf.col_names_dict for node_type in data.node_types},
             node_to_col_stats=col_stats_dict,
             torch_frame_model_kwargs=torch_frame_model_kwargs,
         )
 
         self.temporal_encoder = HeteroTemporalEncoder(
-            node_types=[
-                node_type for node_type in data.node_types
-                if "time" in data[node_type]
-            ],
+            node_types=[node_type for node_type in data.node_types if "time" in data[node_type]],
             channels=channels,
         )
 
@@ -55,16 +49,16 @@ class BaseModel(torch.nn.Module, ABC):
         self.temporal_encoder.reset_parameters()
 
     def forward(
-            self,
-            batch: HeteroData,
-            entity_table: NodeType,
+        self,
+        batch: HeteroData,
+        entity_table: NodeType,
     ) -> Tensor:
         """Forward pass with base encoding operations.
-        
+
         Args:
             batch (HeteroData): Input batch
             entity_table (NodeType): Target entity type
-            
+
         Returns:
             Tensor: Model output
         """
@@ -73,9 +67,7 @@ class BaseModel(torch.nn.Module, ABC):
         x_dict = self.encoder(batch.tf_dict)
 
         # Add temporal information
-        rel_time_dict = self.temporal_encoder(
-            seed_time, batch.time_dict, batch.batch_dict
-        )
+        rel_time_dict = self.temporal_encoder(seed_time, batch.time_dict, batch.batch_dict)
         for node_type, rel_time in rel_time_dict.items():
             x_dict[node_type] = x_dict[node_type] + rel_time
 
@@ -84,23 +76,23 @@ class BaseModel(torch.nn.Module, ABC):
 
     @abstractmethod
     def post_forward(
-            self,
-            x_dict: Dict[str, Tensor],
-            batch: HeteroData,
-            entity_table: NodeType,
-            seed_time: Tensor,
+        self,
+        x_dict: Dict[str, Tensor],
+        batch: HeteroData,
+        entity_table: NodeType,
+        seed_time: Tensor,
     ) -> Tensor:
         """Process encoded features to produce final output.
-        
+
         This method should be implemented by child classes to define
         custom processing of encoded features (e.g., GNN layers, MLPs, etc.)
-        
+
         Args:
             x_dict (Dict[str, Tensor]): Encoded node features
             batch (HeteroData): Input batch
             entity_table (NodeType): Target entity type
             seed_time (Tensor): Temporal information
-            
+
         Returns:
             Tensor: Model output
         """

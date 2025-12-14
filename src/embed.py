@@ -56,10 +56,7 @@ def main(dataset_name, device=None, batch_size=8192, embedding_model="all-MiniLM
         embedding_model=embedding_model,
         device_type=device_type,
     )
-    emb_list = text_embedder(
-        text_list,
-        device=device
-    )
+    emb_list = text_embedder(text_list, device=device)
 
     emb_path = f"{os.environ['HOME']}/scratch/pre/{dataset_name}/text_emb_{embedding_model}.bin"
     emb = np.stack(emb_list).astype(bfloat16)

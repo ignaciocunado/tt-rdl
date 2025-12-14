@@ -56,22 +56,15 @@ class FFN(nn.Module):
 
 class RelationalBlock(nn.Module):
     def __init__(
-            self,
-            d_model,
-            num_heads,
-            d_ff,
+        self,
+        d_model,
+        num_heads,
+        d_ff,
     ):
         super().__init__()
 
-        self.norms = nn.ModuleDict(
-            {l: nn.RMSNorm(d_model) for l in ["feat", "nbr", "col", "full", "ffn"]}
-        )
-        self.attns = nn.ModuleDict(
-            {
-                l: MaskedAttention(d_model, num_heads)
-                for l in ["feat", "nbr", "col", "full"]
-            }
-        )
+        self.norms = nn.ModuleDict({l: nn.RMSNorm(d_model) for l in ["feat", "nbr", "col", "full", "ffn"]})
+        self.attns = nn.ModuleDict({l: MaskedAttention(d_model, num_heads) for l in ["feat", "nbr", "col", "full"]})
         self.ffn = FFN(d_model, d_ff)
 
     def forward(self, x, block_masks):
@@ -98,12 +91,12 @@ def _make_block_mask(mask, batch_size, seq_len, device):
 
 class RelationalTransformer(nn.Module):
     def __init__(
-            self,
-            num_blocks,
-            d_model,
-            d_text,
-            num_heads,
-            d_ff,
+        self,
+        num_blocks,
+        d_model,
+        d_text,
+        num_heads,
+        d_ff,
     ):
         super().__init__()
 
@@ -134,14 +127,9 @@ class RelationalTransformer(nn.Module):
             }
         )
         self.mask_embs = nn.ParameterDict(
-            {
-                t: nn.Parameter(torch.randn(d_model))
-                for t in ["number", "text", "datetime", "boolean"]
-            }
+            {t: nn.Parameter(torch.randn(d_model)) for t in ["number", "text", "datetime", "boolean"]}
         )
-        self.blocks = nn.ModuleList(
-            [RelationalBlock(d_model, num_heads, d_ff) for i in range(num_blocks)]
-        )
+        self.blocks = nn.ModuleList([RelationalBlock(d_model, num_heads, d_ff) for i in range(num_blocks)])
         self.norm_out = nn.RMSNorm(d_model)
         self.d_model = d_model
 
@@ -163,18 +151,14 @@ class RelationalTransformer(nn.Module):
         same_node = node_idxs[:, :, None] == node_idxs[:, None, :]  # (B, S, S)
 
         # kv index is among q's foreign -> primary neighbors
-        kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(
-            -1
-        )  # (B, S, S)
+        kv_in_f2p = (node_idxs[:, None, :, None] == f2p_nbr_idxs[:, :, None, :]).any(-1)  # (B, S, S)
 
         # q index is among kv's primary -> foreign neighbors (reverse relation)
-        q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(
-            -1
-        )  # (B, S, S)
+        q_in_f2p = (node_idxs[:, :, None, None] == f2p_nbr_idxs[:, None, :, :]).any(-1)  # (B, S, S)
 
         # Same column AND same table
         same_col_table = (col_name_idxs[:, :, None] == col_name_idxs[:, None, :]) & (
-                table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
+            table_name_idxs[:, :, None] == table_name_idxs[:, None, :]
         )  # (B, S, S)
 
         # Final boolean masks (apply padding once here)
@@ -196,27 +180,19 @@ class RelationalTransformer(nn.Module):
             seq_len=seq_len,
             device=device,
         )
-        block_masks = {
-            l: make_block_mask(attn_mask) for l, attn_mask in attn_masks.items()
-        }
+        block_masks = {l: make_block_mask(attn_mask) for l, attn_mask in attn_masks.items()}
 
         x = 0
         x = x + (
-                self.norm_dict["col_name"](
-                    self.enc_dict["col_name"](batch["col_name_values"])
-                )
-                * (~is_padding)[..., None]
+            self.norm_dict["col_name"](self.enc_dict["col_name"](batch["col_name_values"])) * (~is_padding)[..., None]
         )
 
         for i, t in enumerate(["number", "text", "datetime", "boolean"]):
             x = x + (
-                    self.norm_dict[t](self.enc_dict[t](batch[t + "_values"]))
-                    * ((batch["sem_types"] == i) & ~batch["masks"] & ~is_padding)[..., None]
+                self.norm_dict[t](self.enc_dict[t](batch[t + "_values"]))
+                * ((batch["sem_types"] == i) & ~batch["masks"] & ~is_padding)[..., None]
             )
-            x = x + (
-                    self.mask_embs[t]
-                    * ((batch["sem_types"] == i) & batch["masks"] & ~is_padding)[..., None]
-            )
+            x = x + (self.mask_embs[t] * ((batch["sem_types"] == i) & batch["masks"] & ~is_padding)[..., None])
 
         for i, block in enumerate(self.blocks):
             x = block(x, block_masks)
@@ -245,9 +221,7 @@ class RelationalTransformer(nn.Module):
             if t in ("number", "datetime"):
                 loss_t = F.huber_loss(yhat, y, reduction="none").mean(-1)
             elif t == "boolean":
-                loss_t = F.binary_cross_entropy_with_logits(
-                    yhat, (y > 0).float(), reduction="none"
-                ).mean(-1)
+                loss_t = F.binary_cross_entropy_with_logits(yhat, (y > 0).float(), reduction="none").mean(-1)
             elif t == "text":
                 raise ValueError("masking text not supported")
 

@@ -3,6 +3,7 @@ import os
 import sys
 from datetime import datetime
 
+
 def logger_setup(log_dir: str = "logs"):
     """Sets up logging for the project.
     Args:
@@ -16,6 +17,6 @@ def logger_setup(log_dir: str = "logs"):
         format="%(asctime)s [%(levelname)-5.5s] %(message)s",
         handlers=[
             logging.FileHandler(os.path.join(os.path.join(log_dir, f"run_{timestamp}.log"))),  ## log to local log file
-            logging.StreamHandler(sys.stdout)  ## log also to stdout (i.e., print to screen)
-        ]
+            logging.StreamHandler(sys.stdout),  ## log also to stdout (i.e., print to screen)
+        ],
     )

@@ -4,7 +4,7 @@ import os
 from src.dataloader import RelBenchDataLoader
 from src.models.reltt import RelationalTransformer
 
-os.environ['XDG_CACHE_HOME'] = '/tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl/data'
+os.environ["XDG_CACHE_HOME"] = "/tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl/data"
 
 from src.config import CustomConfig
 
@@ -21,6 +21,7 @@ import wandb
 from torch import optim
 from torch.utils.data import DataLoader
 
+
 def set_seed(seed):
     """Sets the seed for all random number generators.
     Args:
@@ -30,24 +31,27 @@ def set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, help="The dataset to use", required=True)
     parser.add_argument("--task", type=str, help="The task to solve", required=True)
-    parser.add_argument("--save_artifacts", action='store_true', help="Whether to save artifacts")
-    parser.add_argument("--num_workers", type=int, default=8, help="How many workers to use for data loading. Default: 8.")
+    parser.add_argument("--save_artifacts", action="store_true", help="Whether to save artifacts")
+    parser.add_argument(
+        "--num_workers", type=int, default=8, help="How many workers to use for data loading. Default: 8."
+    )
     parser.add_argument("--eval_freq", type=int, default=2, help="Evaluate every x epochs")
     parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
-    parser.add_argument("--lr_schedule", action='store_true', help="Whether to use lr_scheduler")
+    parser.add_argument("--lr_schedule", action="store_true", help="Whether to use lr_scheduler")
     parser.add_argument("--wd", type=float, default=0.1, help="Weight decay")
     parser.add_argument("--epochs", type=int, default=10, help="Number of epochs")
     parser.add_argument("--max_steps", type=int, default=50_001, help="Max number of steps")
-    parser.add_argument('--optimiser', type=str, default='adam', help='Optimizer to use')
+    parser.add_argument("--optimiser", type=str, default="adam", help="Optimizer to use")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--channels", type=int, default=128, help="Number of channels")
     parser.add_argument("--aggr", type=str, default="sum", help="Aggregation method")
     parser.add_argument("--num_blocks", type=int, default=2, help="Number of layers")
-    parser.add_argument("--early_stopping", action='store_true', help="Use early stopping")
+    parser.add_argument("--early_stopping", action="store_true", help="Use early stopping")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
 
@@ -55,18 +59,18 @@ if __name__ == "__main__":
 
     # Override default configuration
     config = CustomConfig(
-        data_name = args.dataset ,
-        task_name = args.task,
-        evaluation_freq = args.eval_freq,
-        learning_rate = args.lr,
-        learning_rate_schedule = args.lr_schedule,
-        weight_decay = args.wd,
-        epochs = args.epochs,
-        max_steps = args.max_steps,
-        optimiser = args.optimiser,
-        batch_size = args.batch_size,
-        channels = args.channels,
-        num_workers = args.num_blocks,
+        data_name=args.dataset,
+        task_name=args.task,
+        evaluation_freq=args.eval_freq,
+        learning_rate=args.lr,
+        learning_rate_schedule=args.lr_schedule,
+        weight_decay=args.wd,
+        epochs=args.epochs,
+        max_steps=args.max_steps,
+        optimiser=args.optimiser,
+        batch_size=args.batch_size,
+        channels=args.channels,
+        num_workers=args.num_blocks,
         save_artifacts=args.save_artifacts,
         early_stopping=args.early_stopping,
     )
@@ -113,9 +117,30 @@ if __name__ == "__main__":
     )
 
     loader_dict = {
-        "train": DataLoader(train_data, batch_size=None, num_workers=config.num_workers, persistent_workers=False, pin_memory=True, in_order=True),
-        "val": DataLoader(val_data, batch_size=None, num_workers=config.num_workers, persistent_workers=False, pin_memory=True, in_order=True),
-        "test": DataLoader(test_data, batch_size=None, num_workers=config.num_workers, persistent_workers=False, pin_memory=True, in_order=True)
+        "train": DataLoader(
+            train_data,
+            batch_size=None,
+            num_workers=config.num_workers,
+            persistent_workers=False,
+            pin_memory=True,
+            in_order=True,
+        ),
+        "val": DataLoader(
+            val_data,
+            batch_size=None,
+            num_workers=config.num_workers,
+            persistent_workers=False,
+            pin_memory=True,
+            in_order=True,
+        ),
+        "test": DataLoader(
+            test_data,
+            batch_size=None,
+            num_workers=config.num_workers,
+            persistent_workers=False,
+            pin_memory=True,
+            in_order=True,
+        ),
     }
 
     model = RelationalTransformer(
@@ -123,17 +148,24 @@ if __name__ == "__main__":
         d_model=config.channels,
         d_text=config.d_text,
         num_heads=config.attn_heads,
-        d_ff=config.feed_forward_dim)
+        d_ff=config.feed_forward_dim,
+    )
     model = model.to(config.device)
     model = model.to(torch.bfloat16)
 
     # Initialize optimizer and loss function
     optimiser = None
-    if config.optimiser == 'adam':
+    if config.optimiser == "adam":
         optimizer = Adam(model.parameters(), lr=config.learning_rate)
-    elif config.optimiser == 'adamW':
-        optimizer = AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay,
-                          betas=(0.9, 0.999),eps=1e-8, fused=True)
+    elif config.optimiser == "adamW":
+        optimizer = AdamW(
+            model.parameters(),
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay,
+            betas=(0.9, 0.999),
+            eps=1e-8,
+            fused=True,
+        )
     else:
         raise ValueError("Invalid optimizer specified")
 
@@ -148,10 +180,7 @@ if __name__ == "__main__":
 
     net = torch.compile(model, dynamic=False)
 
-    wandb.init(
-        project="Tabular Learning",
-        config={"model": 'Tabular Transformer'} | config.__dict__
-    )
+    wandb.init(project="Tabular Learning", config={"model": "Tabular Transformer"} | config.__dict__)
 
     logging.info("Model: {model}")
     total_params = sum(p.numel() for p in model.parameters())

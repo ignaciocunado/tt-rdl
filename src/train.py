@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 from config import CustomConfig
 
+
 def evaluate(model, steps, loaders, eval_loaders_iters, config):
     metrics = {"val": {}, "test": {}}
     model.eval()
@@ -25,7 +26,9 @@ def evaluate(model, steps, loaders, eval_loaders_iters, config):
             eval_load_times = []
             eval_loader = loaders[split]
             pbar = tqdm(
-                total=(min(config.max_eval_steps, len(eval_loader)) if config.max_eval_steps > -1 else len(eval_loader)),
+                total=(
+                    min(config.max_eval_steps, len(eval_loader)) if config.max_eval_steps > -1 else len(eval_loader)
+                ),
                 desc=f"{config.data_name}/{config.task_name}/{split}",
                 disable=False,
             )
@@ -85,7 +88,13 @@ def evaluate(model, steps, loaders, eval_loaders_iters, config):
             loss = sum(losses) / len(losses)
             k = f"loss/{config.data_name}/{config.task_name}/{split}"
             avg_eval_load_time = sum(eval_load_times) / len(eval_load_times)
-            wandb.log({k: loss,f"avg_eval_load_time/{config.data_name}/{config.task_name}": avg_eval_load_time,}, step=steps)
+            wandb.log(
+                {
+                    k: loss,
+                    f"avg_eval_load_time/{config.data_name}/{config.task_name}": avg_eval_load_time,
+                },
+                step=steps,
+            )
 
             preds = torch.cat(preds, dim=0).float().cpu().numpy()
             labels = torch.cat(labels, dim=0).float().cpu().numpy()
@@ -122,7 +131,7 @@ def checkpoint(model: Module, steps, config: CustomConfig, best=False):
 def train(model: Module, loaders: Dict, optimizer: Optimizer, lrs: LRScheduler, config: CustomConfig):
     eval_loader_iters = {}
     for k, eval_loader in loaders.items():
-        if k == 'train':
+        if k == "train":
             pass
         eval_loader_iters[k] = iter(eval_loader)
 
@@ -135,12 +144,12 @@ def train(model: Module, loaders: Dict, optimizer: Optimizer, lrs: LRScheduler, 
     best_test_metrics = dict()
 
     while steps < config.max_steps:
-        loaders['train'].dataset.sampler.shuffle_py(int(steps / len(loaders['train'])))
-        loader_iter = iter(loaders['train'])
+        loaders["train"].dataset.sampler.shuffle_py(int(steps / len(loaders["train"])))
+        loader_iter = iter(loaders["train"])
 
         while steps < config.max_steps:
             if (config.evaluation_freq is not None and steps % config.evaluation_freq == 0) or (
-                    config.eval_pow2 and steps & (steps - 1) == 0
+                config.eval_pow2 and steps & (steps - 1) == 0
             ):
                 metrics = evaluate(model, steps, loaders, eval_loader_iters, config)
                 if config.save_artifacts:
@@ -156,7 +165,7 @@ def train(model: Module, loaders: Dict, optimizer: Optimizer, lrs: LRScheduler, 
                             checkpoint(model, steps=steps, config=config, best=True)
 
                         else:
-                            checkpoint(model, steps=steps, config=config,  best=False)
+                            checkpoint(model, steps=steps, config=config, best=False)
 
             model.train()
 
@@ -185,10 +194,11 @@ def train(model: Module, loaders: Dict, optimizer: Optimizer, lrs: LRScheduler, 
 
             steps += 1
 
-            wandb.log({
+            wandb.log(
+                {
                     "loss": loss,
                     "lr": optimizer.param_groups[0]["lr"],
-                    "epochs": steps / len(loaders['train']),
+                    "epochs": steps / len(loaders["train"]),
                     "grad_norm": grad_norm,
                 },
                 step=steps,
