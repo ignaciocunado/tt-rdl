@@ -14,13 +14,14 @@
 export APPTAINER_IMAGE="daic.sif"
 export DATASET="rel-f1"
 export TASK="driver-position"
+export HOME="/tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl"
 
 # If you use GPUs
 module use /opt/insy/modulefiles
 module load cuda/11.8
 
-mkdir ~/scratch
-ln -s ~/.cache/relbench ~/scratch/relbench
+mkdir $HOME/scratch
+ln -s $HOME/.cache/relbench $HOME/scratch/relbench
 
 srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl:/workspace --pwd workspace/rustler $APPTAINER_IMAGE maturin develop --uv --release
 
