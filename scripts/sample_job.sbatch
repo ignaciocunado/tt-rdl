@@ -22,15 +22,11 @@ module load cuda/11.8
 mkdir ~/scratch
 ln -s ~/.cache/relbench ~/scratch/relbench
 
-cd rustler
-srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl/ $APPTAINER_IMAGE maturin develop --uv --release
+srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl:/workspace --pwd workspace/rustler $APPTAINER_IMAGE maturin develop --uv --release
 
-cd ..
 srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl/ $APPTAINER_IMAGE python download_task.py --dataset $DATASET --task $TASK
 
-cd rustler
-srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl/ $APPTAINER_IMAGE cargo run --release -- pre $DATASET
+srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl:/workspace --pwd workspace/rustler $APPTAINER_IMAGE cargo run --release -- pre $DATASET
 
-cd ..
 srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl $APPTAINER_IMAGE python src/embed.py $DATASET
 srun apptainer exec --nv --env-file .env -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl $APPTAINER_IMAGE python main.py  --save_artifacts --dataset $DATASET --task $TASK --eval_freq 1000 --seed 1

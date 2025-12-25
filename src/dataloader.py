@@ -8,7 +8,6 @@ from relbench.datasets import get_dataset
 from relbench.modeling.utils import get_stype_proposal
 from relbench.tasks import get_task
 from torch.utils.data import Dataset
-from torch_geometric.loader import NeighborLoader
 
 from rustler import Sampler
 
