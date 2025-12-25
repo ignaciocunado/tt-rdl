@@ -21,7 +21,7 @@ From: condaforge/miniforge3:latest
 
     mamba install -n tt-env -y pytorch=2.2.2 torchvision=0.17.2 torchaudio=2.2.2 pytorch-cuda=11.8 -c pytorch -c nvidia -c pyg
     mamba run -n tt-env pip install --no-cache-dir -r requirements.txt
-    mamba run -n tt-env pip install --no-cache-dir pytorch-frame sentence_transformers relbench strictfire
+    mamba run -n tt-env pip install --no-cache-dir pytorch-frame sentence_transformers relbench strictfire ml-dtypes
 
     # Clean up
     apt-get clean && rm -rf /var/lib/apt/lists/*
