@@ -15,19 +15,29 @@ export APPTAINER_IMAGE="daic.sif"
 export DATASET="rel-f1"
 export TASK="driver-position"
 export HOME="/tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl"
+mkdir -p $HOME/scratch
+export CARGO_TARGET_DIR=$HOME/scratch/cargo-target
+mkdir -p $CARGO_TARGET_DIR
 
 # If you use GPUs
 module use /opt/insy/modulefiles
 module load cuda/11.8
 
-mkdir $HOME/scratch
-ln -s $HOME/.cache/relbench $HOME/scratch/relbench
+ln -sf $HOME/.cache/relbench $HOME/scratch/relbench
 
-srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl:/workspace --pwd workspace/rustler $APPTAINER_IMAGE maturin develop --uv --release
+srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl:/workspace --pwd /workspace/rustler "$APPTAINER_IMAGE" bash -lc '
+    export CARGO_HOME=/tmp/cargo-home
+    export CARGO_TARGET_DIR=/tmp/cargo-target
+    mkdir -p "$CARGO_HOME" "$CARGO_TARGET_DIR"
+    maturin develop --release'
 
 srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl/ $APPTAINER_IMAGE python download_task.py --dataset $DATASET --task $TASK
 
-srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl:/workspace --pwd workspace/rustler $APPTAINER_IMAGE cargo run --release -- pre $DATASET
+srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl:/workspace --pwd /workspace/rustler "$APPTAINER_IMAGE" bash -lc '
+    export CARGO_HOME=/tmp/cargo-home
+    export CARGO_TARGET_DIR=/tmp/cargo-target
+    mkdir -p "$CARGO_HOME" "$CARGO_TARGET_DIR"
+    cargo run --release -- pre '"$DATASET"''
 
 srun apptainer exec -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl $APPTAINER_IMAGE python src/embed.py $DATASET
 srun apptainer exec --nv --env-file .env -B /tudelft.net/staff-umbrella/CSE3000GLTD/ignacio/tt-rdl $APPTAINER_IMAGE python main.py  --save_artifacts --dataset $DATASET --task $TASK --eval_freq 1000 --seed 1
